@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  nlp-text-agent:
+    build: .
+    container_name: nlp-text-agent
+    ports:
+      - "8005:8005"
+    env_file:
+      - .env.free   # Switch to .env.paid for production
+    volumes:
+      - hf-cache:/app/hf_cache
+    depends_on:
+      - redis
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  redis:
+    image: redis:7-alpine
+    container_name: nlp-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # Uncomment for free mode (local LLM)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: nlp-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   restart: unless-stopped
+
+volumes:
+  hf-cache:
+    driver: local
+  redis-data:
+    driver: local
+  # ollama-data:
+  #   driver: local
