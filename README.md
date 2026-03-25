@@ -1,8 +1,18 @@
 # NLP/Text Agent — Microservice 06
+A high‑performance FastAPI microservice delivering sentiment analysis, NER, topic modeling, zero‑shot classification, embeddings, and summarization, ready for AI pipeline integration.
 
-Production-ready FastAPI microservice for unstructured text analysis.
-Part of the **GEMRSLIZE** multi-agent data analysis platform.
-
+### Tech Stack
+- **Python 3.11** – modern, clean syntax and rich ecosystem
+- **FastAPI** – fast, async web framework with automatic OpenAPI docs
+- **Pydantic** – data validation and settings management
+- **spaCy** – industrial‑strength NLP for NER and preprocessing
+- **BERTopic** – state‑of‑the‑art topic modeling
+- **HuggingFace Transformers** – sentiment analysis models
+- **SentenceTransformers** – embedding generation
+- **Ollama & Groq** – flexible LLM back‑ends (free & paid modes)
+- **PostgreSQL + pgvector** – vector‑store for embeddings
+- **Docker** – containerised deployment
+- **GitHub Actions** – CI/CD pipeline for testing and linting
 ## Quick Start
 
 ```bash
