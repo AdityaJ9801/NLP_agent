@@ -14,7 +14,7 @@ from typing import Any
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_groq import ChatGroq
 from langchain_community.chat_models import ChatOllama
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -116,6 +116,16 @@ def get_llm_provider() -> LLMProvider:
     elif provider_name == "openai":
         logger.info("Initializing LLM provider: openai")
         llm = ChatOpenAI(api_key=settings.OPENAI_API_KEY, model_name=settings.OPENAI_MODEL, temperature=0.3)
+        _provider_instance = LLMProvider(llm)
+    elif provider_name == "azure_openai":
+        logger.info("Initializing LLM provider: azure_openai")
+        llm = AzureChatOpenAI(
+            api_key=settings.AZURE_OPENAI_API_KEY,
+            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            azure_deployment=settings.AZURE_OPENAI_DEPLOYMENT_NAME,
+            api_version=settings.AZURE_OPENAI_API_VERSION,
+            temperature=0.3
+        )
         _provider_instance = LLMProvider(llm)
     else:
         raise ValueError(f"Unsupported LLM_PROVIDER: {provider_name}")

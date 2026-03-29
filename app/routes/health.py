@@ -30,10 +30,24 @@ async def health_check():
         "bertopic": topics._model_instance is not None,
     }
 
+    settings = get_settings()
+    provider = str(getattr(settings, "LLM_PROVIDER", "unknown"))
+    model = ""
+    if provider == "azure_openai":
+        model = getattr(settings, "AZURE_OPENAI_DEPLOYMENT_NAME", "")
+    elif provider == "groq":
+        model = getattr(settings, "GROQ_MODEL", "")
+    elif provider == "openai":
+        model = "gpt-4o"
+    elif provider == "ollama":
+        model = getattr(settings, "OLLAMA_MODEL", "")
+
     return HealthResponse(
         status="healthy",
         service="nlp-text-agent",
         version="1.0.0",
         models_loaded=models_loaded,
         uptime_seconds=round(time.time() - _start_time, 2),
+        llm_provider=provider,
+        llm_model=model,
     )

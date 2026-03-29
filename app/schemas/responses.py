@@ -99,3 +99,5 @@ class HealthResponse(BaseModel):
     version: str = "1.0.0"
     models_loaded: dict[str, bool] = Field(default_factory=dict)
     uptime_seconds: float = 0.0
+    llm_provider: str = ""
+    llm_model: str = ""

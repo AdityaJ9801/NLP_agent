@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     """Central configuration for the NLP/Text Agent microservice."""
 
     model_config = SettingsConfigDict(
-        env_file=os.getenv("ENV_FILE", ".env.free"),
+        env_file=os.getenv("ENV_FILE", ".env.paid"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -26,11 +26,17 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
 
     # ── LLM Provider ────────────────────────────────────────
-    LLM_PROVIDER: Literal["ollama", "openai", "anthropic", "groq", "grok"] = "ollama"
+    LLM_PROVIDER: Literal["ollama", "openai", "anthropic", "groq", "grok", "azure_openai"] = "azure_openai"
 
     # Ollama
     OLLAMA_BASE_URL: str = ""
     OLLAMA_MODEL: str = ""
+    
+    # Azure OpenAI
+    AZURE_OPENAI_API_KEY: str = ""
+    AZURE_OPENAI_ENDPOINT: str = ""
+    AZURE_OPENAI_DEPLOYMENT_NAME: str = ""
+    AZURE_OPENAI_API_VERSION: str = "2024-02-15-preview"
 
     # Groq
     GROQ_MODEL: str = "llama-3.1-8b-instant"
