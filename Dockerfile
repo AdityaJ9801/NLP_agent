@@ -5,6 +5,7 @@ WORKDIR /app
 # System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps
@@ -18,10 +19,15 @@ RUN python -m spacy download en_core_web_sm
 COPY . .
 
 # HuggingFace cache directory (mount as volume for persistence)
-ENV HF_HOME=/app/hf_cache
-ENV TRANSFORMERS_CACHE=/app/hf_cache
+ENV HF_HOME=/app/hf_cache \
+    TRANSFORMERS_CACHE=/app/hf_cache \
+    PORT=8005
+
 RUN mkdir -p /app/hf_cache
 
-EXPOSE 8005
+EXPOSE ${PORT}
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005", "--workers", "1"]
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1
