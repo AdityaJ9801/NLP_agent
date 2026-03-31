@@ -128,3 +128,122 @@ async def root():
         "port": settings.PORT,
         "docs": "/docs",
     }
+
+
+# ── Orchestrator integration ──────────────────────────────────────────────────
+
+
+@app.post("/run", tags=["Orchestrator"])
+async def run_task(payload: dict):
+    """
+    Orchestrator pipeline integration endpoint.
+
+    Extracts text columns from upstream context (_context) and runs
+    sentiment analysis + NER. Returns a combined NLP insights dict
+    that the Report Agent can consume.
+
+    Expected _context keys (from Context or SQL agent):
+      - data_preview: list[dict]  — rows with text columns
+      - columns: list             — column metadata (used to find text cols)
+    """
+    from app.pipelines import sentiment as sentiment_pipeline, ner as ner_pipeline
+    from app.utils.batch_processor import process_text_column
+    from app.utils.text_cleaner import clean_texts
+
+    context = payload.get("_context", {})
+    task_description = payload.get("task_description") or payload.get("query") or ""
+
+    data_rows: list[dict] = []
+    column_meta: list = []
+
+    # Locate rows — prefer SQL agent output, fall back to Context Agent sample_values
+    for dep_data in context.values():
+        if not isinstance(dep_data, dict):
+            continue
+        if "data_preview" in dep_data and dep_data["data_preview"]:
+            data_rows = dep_data["data_preview"]
+            column_meta = dep_data.get("columns", [])
+            break
+        if "source_id" in dep_data and "columns" in dep_data and not data_rows:
+            # Reconstruct rows from sample_values
+            cols = dep_data["columns"]
+            if cols:
+                max_samples = max(len(c.get("sample_values", [])) for c in cols)
+                for i in range(max_samples):
+                    row = {}
+                    for col in cols:
+                        samples = col.get("sample_values", [])
+                        row[col["name"]] = samples[i] if i < len(samples) else None
+                    data_rows.append(row)
+                column_meta = cols
+
+    if not data_rows:
+        return {
+            "nlp_type": "no_data",
+            "message": "No text data found in _context",
+            "sentiment": None,
+            "entities": None,
+        }
+
+    # Identify text columns (object/string dtype, not identifiers)
+    _SKIP_SEMANTICS = {"identifier", "datetime", "date", "url", "email"}
+    text_col_names: list[str] = []
+    for col in column_meta:
+        if isinstance(col, dict):
+            dtype = col.get("dtype", "")
+            semantic = col.get("semantic_type", "")
+            name = col.get("name", "")
+            if dtype in ("object", "string") and semantic not in _SKIP_SEMANTICS:
+                text_col_names.append(name)
+        elif isinstance(col, str):
+            # Infer from first row value
+            val = data_rows[0].get(col, "") if data_rows else ""
+            if isinstance(val, str) and len(val) > 3:
+                text_col_names.append(col)
+
+    # Fallback: pick any string column with avg length > 5
+    if not text_col_names and data_rows:
+        for key, val in data_rows[0].items():
+            if isinstance(val, str) and len(val) > 5:
+                text_col_names.append(key)
+
+    if not text_col_names:
+        return {
+            "nlp_type": "no_text_columns",
+            "message": "No suitable text columns found for NLP analysis",
+            "sentiment": None,
+            "entities": None,
+        }
+
+    # Collect texts from the first suitable text column
+    primary_col = text_col_names[0]
+    texts = [str(r[primary_col]) for r in data_rows if r.get(primary_col)]
+
+    if not texts:
+        return {
+            "nlp_type": "empty_texts",
+            "message": f"Column '{primary_col}' has no non-null values",
+            "sentiment": None,
+            "entities": None,
+        }
+
+    cleaned = clean_texts(texts)
+
+    # Run sentiment + NER in parallel
+    import asyncio as _asyncio
+    sentiment_rows, entity_rows = await _asyncio.gather(
+        process_text_column(cleaned, sentiment_pipeline.analyze_batch),
+        process_text_column(cleaned, ner_pipeline.extract_batch),
+    )
+
+    sentiment_agg = sentiment_pipeline.aggregate(sentiment_rows)
+    entity_agg = ner_pipeline.aggregate(entity_rows)
+
+    return {
+        "nlp_type": "sentiment_ner",
+        "text_column": primary_col,
+        "total_texts": len(texts),
+        "sentiment": sentiment_agg,
+        "entities": entity_agg,
+        "task": task_description,
+    }
