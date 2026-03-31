@@ -1,0 +1,84 @@
+name: Deploy NLP Agent to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AGENT_NAME: nlp-agent
+  TARGET_PORT: "8005"
+  RESOURCE_GROUP: rg-axiom-ai
+  CONTAINER_ENV: axiom-ai-env
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.REGISTRY_LOGIN_SERVER }}/${{ env.AGENT_NAME }}:${{ github.sha }}
+            ${{ secrets.REGISTRY_LOGIN_SERVER }}/${{ env.AGENT_NAME }}:latest
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          IMAGE="${{ secrets.REGISTRY_LOGIN_SERVER }}/${{ env.AGENT_NAME }}:${{ github.sha }}"
+
+          EXISTS=$(az containerapp show \
+            --name ${{ env.AGENT_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "name" -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$EXISTS" ]; then
+            echo "🆕 Creating new Container App: ${{ env.AGENT_NAME }}"
+            az containerapp create \
+              --name ${{ env.AGENT_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --environment ${{ env.CONTAINER_ENV }} \
+              --image $IMAGE \
+              --target-port ${{ env.TARGET_PORT }} \
+              --ingress internal \
+              --cpu 1.0 \
+              --memory 2Gi \
+              --min-replicas 0 \
+              --max-replicas 3 \
+              --registry-server ${{ secrets.REGISTRY_LOGIN_SERVER }} \
+              --registry-username ${{ secrets.REGISTRY_USERNAME }} \
+              --registry-password ${{ secrets.REGISTRY_PASSWORD }} \
+              --env-vars \
+                "LLM_PROVIDER=openai" \
+                "OPENAI_API_KEY=secretref:openai-api-key" \
+                "PORT=${{ env.TARGET_PORT }}" \
+              --secrets \
+                "openai-api-key=${{ secrets.OPENAI_API_KEY }}"
+          else
+            echo "🔄 Updating existing Container App: ${{ env.AGENT_NAME }}"
+            az containerapp update \
+              --name ${{ env.AGENT_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --image $IMAGE
+          fi
+
+      - name: Show Deployment Status
+        run: |
+          echo "✅ ${{ env.AGENT_NAME }} deployed (internal ingress)"
+          echo "   Reachable at: http://${{ env.AGENT_NAME }} from within the Container Apps environment"

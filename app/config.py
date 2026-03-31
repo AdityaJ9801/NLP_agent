@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # Groq
     GROQ_MODEL: str = "llama-3.1-8b-instant"
-    groq_api_key: str = "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"
+    groq_api_key: str = ""
     xai_api_key: str = ""
     
     # OpenAI (optional)
